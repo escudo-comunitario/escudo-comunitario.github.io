@@ -1,0 +1,10 @@
+{
+  "name": "Escudo Comunitario",
+  "short_name": "Escudo",
+  "lang": "es-CO",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "theme_color": "#006A60",
+  "background_color": "#F8FAF8"
+}

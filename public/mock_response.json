@@ -1,0 +1,24 @@
+{
+  "id_analisis": "ESC-2026-BOSA-0042",
+  "timestamp": "2026-10-22T14:30:00Z",
+  "nivel_riesgo": "ALTO",
+  "color_semaforo": "ROJO",
+  "modalidad_detectada": "Suplantación de Billetera Digital (Nequi / Daviplata)",
+  "explicacion_ciudadana": "Están fingiendo ser de Daviplata para asustarlo con un falso embargo y pedirle que entre a una página falsa a poner su clave.",
+  "audio_guion": "Peligro. No toque ningún enlace ni comparta claves. Su cuenta no tiene ningún problema.",
+  "recomendaciones": [
+    "No ingrese al enlace adjunto.",
+    "No comparta contraseñas ni códigos que le lleguen por mensaje de texto.",
+    "Avise de inmediato a su familiar de confianza."
+  ],
+  "evidencia_criptografica": {
+    "hash_actual": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "hash_anterior": "8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92",
+    "cadena_valida": true,
+    "qr_payload_url": "https://escudo-bosa.gov.co/verify?id=ESC-2026-BOSA-0042"
+  },
+  "datos_abiertos_referencia": {
+    "fuente": "Datos Abiertos Bogotá - Delitos Informáticos Bosa",
+    "coincidencias_similares_mes": 28
+  }
+}

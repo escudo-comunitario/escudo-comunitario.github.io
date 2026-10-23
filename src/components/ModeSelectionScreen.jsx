@@ -7,6 +7,7 @@ import PhoneAndroidOutlinedIcon from '@mui/icons-material/PhoneAndroidOutlined';
 import VolumeUpOutlinedIcon from '@mui/icons-material/VolumeUpOutlined';
 import { announceGuided, getGuidedSpeechSnapshot, stopGuidedSpeech, subscribeGuidedSpeech } from '../services/guidedSpeech';
 import InstallAppButton from './InstallAppButton';
+import BackendStatusIndicator from './BackendStatusIndicator';
 
 const modes = {
   guided: {
@@ -23,7 +24,7 @@ const modes = {
   },
 };
 
-export default function ModeSelectionScreen({ onContinue }) {
+export default function ModeSelectionScreen({ onContinue, backendStatus = 'connecting' }) {
   const [selectedMode, setSelectedMode] = useState('');
   const speech = useSyncExternalStore(subscribeGuidedSpeech, getGuidedSpeechSnapshot, getGuidedSpeechSnapshot);
   const canSpeak = speech.supported;
@@ -46,6 +47,9 @@ export default function ModeSelectionScreen({ onContinue }) {
   return (
     <Box className="mode-selection-screen">
       <Container maxWidth="sm" className="mode-selection-content">
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+          <BackendStatusIndicator status={backendStatus} />
+        </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
           <Box className="mode-brand-mark" aria-hidden="true"><HearingOutlinedIcon /></Box>
           <Box>

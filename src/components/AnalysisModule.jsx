@@ -10,6 +10,7 @@ import { analyzeMessage, validateAnalysisResult } from '../services/api';
 import AnalysisResult, { getMessageSpeechText } from './AnalysisResult';
 import GuidedVoiceControls from './GuidedVoiceControls';
 import { announceGuidedSequence, stopGuidedSpeech } from '../services/guidedSpeech';
+import { transcriptFromResults } from '../services/speechTranscript';
 
 function cancelRecognition(recognition) {
   if (typeof recognition?.abort === 'function') recognition.abort();
@@ -164,7 +165,7 @@ export default function AnalysisModule({ active = true, guided = false, resetVer
       setResult(response);
       setResultMessage(message.trim());
       setStatus('result');
-      setAutoSpeakKey((key) => key + 1);
+      if (guided) setAutoSpeakKey((key) => key + 1);
     } catch (requestError) {
       if (requestRef.current !== controller || requestError?.name === 'AbortError') return;
       console.error('No se pudo revisar el mensaje.', requestError);
@@ -211,7 +212,7 @@ export default function AnalysisModule({ active = true, guided = false, resetVer
     recognition.onresult = (event) => {
       if (recognitionRef.current !== recognition) return;
       voiceHasResultRef.current = true;
-      const transcript = Array.from(event.results).map((item) => item[0]?.transcript || '').join('');
+      const transcript = transcriptFromResults(event.results);
       setMessage(`${textBeforeDictation}${textBeforeDictation && transcript ? ' ' : ''}${transcript}`);
       setAnalysisConfirmed(false);
     };
@@ -235,8 +236,8 @@ export default function AnalysisModule({ active = true, guided = false, resetVer
         setError(noSpeech);
       }
       if (voiceHasResultRef.current) {
-        const recognizedText = Array.from(recognition.results || []).map((item) => item[0]?.transcript || '').join('').trim();
-        if (recognizedText) announceGuidedSequence(['Esto es lo que he entendido. Escúchalo y comprueba que esté correcto antes de continuar.', recognizedText]);
+        const recognizedText = transcriptFromResults(recognition.results).trim();
+        if (guided && recognizedText) announceGuidedSequence(['Esto es lo que he entendido. Escúchalo y comprueba que esté correcto antes de continuar.', recognizedText]);
       }
     };
     try { recognition.start(); } catch {
@@ -273,7 +274,7 @@ export default function AnalysisModule({ active = true, guided = false, resetVer
       </Box>
 
       <Alert severity="info">No escribas tus contraseñas ni los códigos que te llegan al celular.</Alert>
-      <GuidedVoiceControls active={active} speakText={mode === 'voice' ? 'Puedes contar el mensaje con tu voz. Revísalo antes de analizarlo.' : 'Pega o escribe el mensaje. Puedes escucharlo antes de analizarlo.'} autoPlayKey={guided || mode !== entryMode ? undefined : entryVersion} speakLabel="Escuchar instrucciones" showDictation={false} />
+      <GuidedVoiceControls active={active} speakText={mode === 'voice' ? 'Puedes contar el mensaje con tu voz. Revísalo antes de analizarlo.' : 'Pega o escribe el mensaje. Puedes escucharlo antes de analizarlo.'} speakLabel="Escuchar instrucciones" showDictation={false} />
 
       <Paper component="form" onSubmit={submit} variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderRadius: 3 }} aria-busy={isBusy}>
         {showMessageField && <TextField
@@ -332,7 +333,7 @@ export default function AnalysisModule({ active = true, guided = false, resetVer
           Este resultado corresponde al texto anterior. Pulsa «Analizar mensaje» para revisar el texto actualizado.
         </Alert>}
         <AnalysisResult result={result} />
-        <GuidedVoiceControls active={active} speakText={resultNarration} speakLabel="Escuchar resultado" autoPlayKey={autoSpeakKey} showDictation={false} />
+        <GuidedVoiceControls active={active} speakText={resultNarration} speakLabel="Escuchar resultado" autoPlayKey={guided ? autoSpeakKey : undefined} showDictation={false} />
         <Button variant="outlined" onClick={onRequestHelp}>¿Quieres revisarlo con alguien de confianza?</Button>
       </>}
     </Box>

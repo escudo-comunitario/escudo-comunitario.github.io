@@ -18,7 +18,9 @@ import TrustModule from './components/TrustModule';
 import CommunityStatsModule from './components/CommunityStatsModule';
 import ModeSelectionScreen from './components/ModeSelectionScreen';
 import GuidedHome, { guidedHomeSequence } from './components/GuidedHome';
-import { announceGuided, announceGuidedSequence, stopGuidedSpeech } from './services/guidedSpeech';
+import { announceGuidedSequence, stopGuidedSpeech } from './services/guidedSpeech';
+import { createBackendStatusMonitor } from './services/backendStatus';
+import BackendStatusIndicator from './components/BackendStatusIndicator';
 
 const pages = [
   { id: 'home', label: 'Inicio', shortLabel: 'Inicio', icon: <HomeOutlinedIcon /> },
@@ -62,6 +64,7 @@ export default function App() {
   const [guidedHomeVisit, setGuidedHomeVisit] = useState(0);
   const [taskResetVersions, setTaskResetVersions] = useState({ analysis: 0, incident: 0, trust: 0 });
   const [receiptEntryVersion, setReceiptEntryVersion] = useState(0);
+  const [backendStatus, setBackendStatus] = useState('connecting');
   const guidedHomeLeadRef = useRef('');
   const guidedHomeGreetingRef = useRef(true);
 
@@ -74,6 +77,15 @@ export default function App() {
   }, [experienceMode, guided, page, guidedHomeVisit]);
 
   useEffect(() => () => stopGuidedSpeech(), []);
+
+  useEffect(() => {
+    const monitor = createBackendStatusMonitor({ onStatus: setBackendStatus });
+    const startTimer = globalThis.setTimeout(() => monitor.start(), 0);
+    return () => {
+      globalThis.clearTimeout(startTimer);
+      monitor.stop();
+    };
+  }, []);
 
   const startGuidedHome = (lead = '', includeGreeting = true) => {
     stopGuidedSpeech();
@@ -104,13 +116,12 @@ export default function App() {
     setExperienceMode(null);
   };
 
-  const switchToNormal = (message = 'Modo normal. Usa los menús y formularios habituales.', { returnHome = true, discardTask = true } = {}) => {
+  const switchToNormal = (_message = 'Modo normal. Usa los menús y formularios habituales.', { returnHome = true, discardTask = true } = {}) => {
     stopGuidedSpeech();
     if (discardTask) resetAbandonedTask();
     setGuided(false);
     setExperienceMode('normal');
     if (returnHome) setPage('home');
-    announceGuided(message);
   };
 
   const navigate = (nextPage, mode = 'text', startGuided = false) => {
@@ -151,7 +162,7 @@ export default function App() {
     setPage(task);
   };
 
-  if (!experienceMode) return <ModeSelectionScreen onContinue={enterMode} />;
+  if (!experienceMode) return <ModeSelectionScreen backendStatus={backendStatus} onContinue={enterMode} />;
 
   return (
     <Box className="app-shell">
@@ -174,6 +185,9 @@ export default function App() {
             <Button color="inherit" onClick={returnToModeMenu} sx={{ minHeight: 48 }}>Volver al menú</Button>
           </Box>
         </Toolbar>
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', px: { xs: 2, sm: 3 }, pb: 1 }}>
+          <BackendStatusIndicator status={backendStatus} darkBackground />
+        </Box>
       </AppBar>
 
       <Box className="app-content">

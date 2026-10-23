@@ -5,6 +5,12 @@ const VALID_UPZS = new Set(["Bosa Central", "Bosa Occidental", "Tintal Sur", "El
 export const MAX_RECEIPT_IMAGE_BYTES = 5 * 1024 * 1024;
 const RECEIPT_IMAGE_TYPES = new Set(["image/jpeg", "image/png"]);
 
+export function getBackendOpenApiUrl(apiBaseUrl = API_BASE_URL) {
+  const frontendOrigin = typeof window !== "undefined" ? window.location.origin : "http://localhost:5173";
+  const backendUrl = new URL(apiBaseUrl, frontendOrigin);
+  return new URL("/openapi.json", backendUrl.origin).toString();
+}
+
 export class AnalysisServiceError extends Error {
   constructor(message, kind = "service", status = null) {
     super(message);

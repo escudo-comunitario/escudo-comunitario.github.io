@@ -87,7 +87,7 @@ export default function ReceiptAnalysisModule({ active = true, guided = false, e
       return;
     }
     updateImage(nextImage);
-    announceGuided('Imagen seleccionada. Ya puedes verificar el comprobante.');
+    if (guided) announceGuided('Imagen seleccionada. Ya puedes verificar el comprobante.');
   };
 
   const submit = async (event) => {
@@ -96,12 +96,12 @@ export default function ReceiptAnalysisModule({ active = true, guided = false, e
     if (!image) {
       setError('Selecciona una imagen JPG o PNG para continuar.');
       setStatus('error');
-      announceGuided('Primero selecciona una imagen del comprobante.');
+      if (guided) announceGuided('Primero selecciona una imagen del comprobante.');
       return;
     }
 
     stopGuidedSpeech();
-    announceGuided('Verificando comprobante. Espera un momento.');
+    if (guided) announceGuided('Verificando comprobante. Espera un momento.');
     const controller = new AbortController();
     requestRef.current = controller;
     setError('');
@@ -112,7 +112,7 @@ export default function ReceiptAnalysisModule({ active = true, guided = false, e
       if (requestRef.current !== controller) return;
       setResult(response);
       setStatus('result');
-      setAutoSpeakKey((key) => key + 1);
+      if (guided) setAutoSpeakKey((key) => key + 1);
     } catch (requestError) {
       if (requestRef.current !== controller || requestError?.name === 'AbortError') return;
       const isServiceError = requestError instanceof AnalysisServiceError;
@@ -125,7 +125,7 @@ export default function ReceiptAnalysisModule({ active = true, guided = false, e
       console.error('No se pudo revisar el comprobante.', diagnostic);
       setError('No se pudo revisar el comprobante. Comprueba tu conexión e inténtalo de nuevo.');
       setStatus('error');
-      announceGuided('No se pudo revisar el comprobante. Comprueba tu conexión e inténtalo de nuevo.');
+      if (guided) announceGuided('No se pudo revisar el comprobante. Comprueba tu conexión e inténtalo de nuevo.');
     } finally {
       if (requestRef.current === controller) requestRef.current = null;
     }
@@ -164,7 +164,7 @@ export default function ReceiptAnalysisModule({ active = true, guided = false, e
           active={active}
           speakText="Aquí puedes revisar un comprobante de pago. Selecciona su imagen y pulsa verificar. Recuerda que el resultado es orientativo."
           speakLabel="Escuchar de nuevo"
-          autoPlayKey={entryVersion}
+          autoPlayKey={guided ? entryVersion : undefined}
           showDictation={false}
         />
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
@@ -206,7 +206,7 @@ export default function ReceiptAnalysisModule({ active = true, guided = false, e
 
       {result && <>
         <ReceiptAnalysisResult result={result} />
-        <GuidedVoiceControls active={active} speakText={getReceiptSpeechText(result)} speakLabel="Escuchar resultado" autoPlayKey={autoSpeakKey} showDictation={false} />
+        <GuidedVoiceControls active={active} speakText={getReceiptSpeechText(result)} speakLabel="Escuchar resultado" autoPlayKey={guided ? autoSpeakKey : undefined} showDictation={false} />
       </>}
     </Box>
   );

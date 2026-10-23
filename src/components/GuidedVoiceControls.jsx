@@ -4,6 +4,7 @@ import HearingOutlinedIcon from '@mui/icons-material/HearingOutlined';
 import MicNoneOutlinedIcon from '@mui/icons-material/MicNoneOutlined';
 import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
 import { announceGuided, announceGuidedSequence, getGuidedSpeechSnapshot, stopGuidedSpeech, subscribeGuidedSpeech } from '../services/guidedSpeech';
+import { transcriptFromResults } from '../services/speechTranscript';
 
 function voiceErrorMessage(error) {
   if (error === 'not-allowed' || error === 'service-not-allowed') return 'No diste permiso para usar el micrófono. Puedes escribir la respuesta.';
@@ -120,8 +121,8 @@ export default function GuidedVoiceControls({
     recognition.onresult = (event) => {
       hasResultRef.current = true;
       const results = Array.from(event.results);
-      const transcript = results.map((item) => item[0]?.transcript || '').join('').trim();
-      const finalTranscript = results.filter((item) => item.isFinal).map((item) => item[0]?.transcript || '').join('').trim();
+      const transcript = transcriptFromResults(results).trim();
+      const finalTranscript = transcriptFromResults(results.filter((item) => item.isFinal)).trim();
       latestTranscriptRef.current = transcript;
       if (finalTranscript) finalTranscriptRef.current = finalTranscript;
       if (transcript && !appendTranscript) onTranscript(transcript);

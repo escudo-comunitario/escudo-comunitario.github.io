@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Alert, Box, Button, FormControl, FormControlLabel, FormLabel, LinearProgress,
+  Alert, Box, Button, CircularProgress, FormControl, FormControlLabel, FormLabel, LinearProgress,
   MenuItem, Paper, Radio, RadioGroup, Stack, TextField, Typography,
 } from '@mui/material';
 import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
@@ -15,6 +15,9 @@ import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import HelpOutlineOutlinedIcon from '@mui/icons-material/HelpOutlineOutlined';
 import GuidedVoiceControls from './GuidedVoiceControls';
 import { announceGuidedSequence } from '../services/guidedSpeech';
+import { reportIncident, verifyIncidentIntegrity } from '../services/api';
+
+const upzOptions = ['Bosa Central', 'Bosa Occidental', 'Tintal Sur', 'El Porvenir'];
 
 const initialForm = { type: '', description: '', date: '', channel: '', impact: '' };
 const typeLabels = {
@@ -81,6 +84,11 @@ export default function IncidentModule({ active = true, guided = false, resetVer
   const [guidedStep, setGuidedStep] = useState(0);
   const [dateChoice, setDateChoice] = useState('');
   const [speechRevision, setSpeechRevision] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [reportError, setReportError] = useState('');
+  const [reportReceipt, setReportReceipt] = useState(null);
+  const [integrityStatus, setIntegrityStatus] = useState(null);
+  const [integrityError, setIntegrityError] = useState('');
   const guidedWasActiveRef = useRef(false);
   const lastResetVersionRef = useRef(resetVersion);
 
@@ -100,9 +108,13 @@ export default function IncidentModule({ active = true, guided = false, resetVer
       `Paso ${guidedStep + 1}.`,
       ...questionSpeech[guidedStep],
     ], { pauseMs: 40 });
-    if (step === 'review') announceGuidedSequence(['Revisa el resumen antes de confirmar la demostración.', summary], { pauseMs: 40 });
-    if (step === 'demo') announceGuidedSequence(['Demostración local. No se envió ni guardó un reporte.']);
-  }, [active, guided, guidedStep, step, speechRevision]);
+    if (step === 'review') announceGuidedSequence(['Revisa el resumen y la UPZ antes de guardar el reporte.', summary], { pauseMs: 40 });
+    if (step === 'demo' && reportReceipt) announceGuidedSequence([
+      `El reporte quedó guardado con identificador ${reportReceipt.id}.`,
+      integrityStatus ? `La cadena completa se verificó en ${integrityStatus.bloques_auditados} registros y ${integrityStatus.integro ? 'aparece íntegra' : 'tiene una alteración detectada'}.` : integrityError,
+    ].filter(Boolean));
+    else if (step === 'demo') announceGuidedSequence(['Demostración local. No se envió ni guardó un reporte.']);
+  }, [active, guided, guidedStep, step, speechRevision, reportReceipt, integrityStatus, integrityError]);
 
   useEffect(() => {
     if (lastResetVersionRef.current === resetVersion) return;
@@ -113,6 +125,10 @@ export default function IncidentModule({ active = true, guided = false, resetVer
     setStep('edit');
     setGuidedStep(0);
     setDateChoice('');
+    setReportError('');
+    setReportReceipt(null);
+    setIntegrityStatus(null);
+    setIntegrityError('');
   }, [resetVersion]);
 
   const update = (field) => (event) => {
@@ -128,6 +144,37 @@ export default function IncidentModule({ active = true, guided = false, resetVer
     if (!form.impact) next.impact = 'Elige la opción que más se acerca.';
     setErrors(next);
     if (Object.keys(next).length === 0) setStep('review');
+  };
+
+  const saveReport = async () => {
+    if (!form.upz) {
+      setErrors({ upz: 'Selecciona la UPZ aproximada para guardar el reporte.' });
+      return;
+    }
+    setIsSubmitting(true);
+    setReportError('');
+    try {
+      const receipt = await reportIncident({
+        modalidad_detectada: typeLabels[form.type],
+        descripcion: form.description.trim(),
+        fecha_aproximada: form.date || null,
+        canal: form.channel || null,
+        resultado: form.impact === 'afectado' ? 'posible afectación' : 'intento sospechoso',
+      }, form.upz);
+      setReportReceipt(receipt);
+      try {
+        setIntegrityStatus(await verifyIncidentIntegrity());
+        setIntegrityError('');
+      } catch (verificationError) {
+        setIntegrityStatus(null);
+        setIntegrityError(verificationError?.message || 'No se pudo consultar la cadena de registros.');
+      }
+      setStep('demo');
+    } catch (requestError) {
+      setReportError(requestError?.message || 'No se pudo guardar el reporte. Revise su conexión e inténtelo de nuevo.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const chooseDate = (choice) => {
@@ -168,6 +215,7 @@ export default function IncidentModule({ active = true, guided = false, resetVer
 
   const restart = () => {
     setForm(initialForm); setErrors({}); setStep('edit'); setGuidedStep(0); setDateChoice('');
+    setReportError(''); setReportReceipt(null); setIntegrityStatus(null); setIntegrityError('');
   };
 
   const summary = `Resumen. Situación: ${typeLabels[form.type] || 'sin seleccionar'}. ${form.description}. Fecha: ${formatDate(form.date)}. Contacto por: ${form.channel || 'no especificado'}. ${form.impact === 'afectado' ? 'Crees que perdiste dinero o resultaste afectado.' : 'Te pareció sospechoso.'}`;
@@ -179,7 +227,7 @@ export default function IncidentModule({ active = true, guided = false, resetVer
         <Typography color="text.secondary">Ordena lo ocurrido para pedir orientación.</Typography>
         {step === 'edit' && !guided && <Button type="button" onClick={onEnableGuided} startIcon={<HelpOutlineOutlinedIcon />} sx={{ mt: 1, minHeight: 48 }}>Ayúdame paso a paso</Button>}
       </Box>
-      <Alert severity="warning">Esta demostración no envía ni guarda la información. No escribas claves, códigos, datos bancarios ni nombres completos.</Alert>
+          <Alert severity="warning">No escribas claves, códigos, datos bancarios ni nombres completos. Al confirmar, la descripción se enviará al backend, que limpia algunos datos personales detectables antes de guardarla.</Alert>
 
       {step === 'edit' && guided && (
         <Paper component="section" aria-labelledby="incident-question" variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderRadius: 3 }}>
@@ -269,11 +317,25 @@ export default function IncidentModule({ active = true, guided = false, resetVer
             <Typography><strong>Contacto:</strong> {form.channel || 'No especificado'}</Typography>
             <Typography><strong>Resultado:</strong> {form.impact === 'afectado' ? 'Crees que resultaste afectado' : 'Te pareció sospechoso'}</Typography>
           </Stack>
+          <TextField
+            select
+            required
+            label="UPZ aproximada"
+            value={form.upz || ''}
+            onChange={(event) => { setForm((current) => ({ ...current, upz: event.target.value })); setErrors((current) => ({ ...current, upz: '' })); }}
+            error={Boolean(errors.upz)}
+            helperText={errors.upz || 'Elige únicamente la zona aproximada; no compartas una dirección.'}
+            fullWidth
+            sx={{ mt: 2 }}
+          >
+            {upzOptions.map((upz) => <MenuItem key={upz} value={upz}>{upz}</MenuItem>)}
+          </TextField>
           {guided && <GuidedVoiceControls active={active} speakText={summary} showDictation={false} />}
-          <Alert severity="info" sx={{ my: 2 }}>Es una demostración local. No se envía ni se guarda en un servidor.</Alert>
+          {reportError && <Alert severity="error" role="alert" sx={{ my: 2 }}>{reportError}</Alert>}
+          <Alert severity="info" sx={{ my: 2 }}>Al confirmar, el backend guardará el reporte después de limpiar datos comunes como correos y teléfonos. La descripción se conserva; no incluyas nombres ni otros datos personales. Solo se mostrará como registrado si el servidor lo confirma.</Alert>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-            <Button variant="outlined" startIcon={<EditNoteOutlinedIcon />} onClick={() => { setSpeechRevision((v) => v + 1); setStep('edit'); setGuidedStep(stepQuestions.length - 1); }}>Volver y corregir</Button>
-            <Button variant="contained" startIcon={<FactCheckOutlinedIcon />} onClick={() => { setSpeechRevision((v) => v + 1); setStep('demo'); }}>Confirmar demostración</Button>
+            <Button variant="outlined" disabled={isSubmitting} startIcon={<EditNoteOutlinedIcon />} onClick={() => { setSpeechRevision((v) => v + 1); setStep('edit'); setGuidedStep(stepQuestions.length - 1); }}>Volver y corregir</Button>
+            <Button variant="contained" disabled={isSubmitting} startIcon={isSubmitting ? <CircularProgress size={20} color="inherit" /> : <FactCheckOutlinedIcon />} onClick={saveReport}>{isSubmitting ? 'Guardando…' : 'Confirmar y guardar reporte'}</Button>
           </Stack>
           {guided && <Button onClick={onCancelGuided} sx={{ mt: 1 }}>Cambiar al modo normal</Button>}
         </Paper>
@@ -281,9 +343,24 @@ export default function IncidentModule({ active = true, guided = false, resetVer
 
       {step === 'demo' && (
         <Paper component="section" role="status" aria-labelledby="incident-demo-title" variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderRadius: 3 }}>
-          <Alert severity="warning" sx={{ mb: 2 }}>Demostración local: no se envió ni guardó ningún reporte.</Alert>
-          <Typography id="incident-demo-title" component="h2" variant="h6" sx={{ fontWeight: 750 }}>La información quedó solo en esta vista</Typography>
-          <Typography color="text.secondary" sx={{ mt: 1 }}>No se creó un número de radicado.</Typography>
+          {reportReceipt ? (
+            <>
+              <Alert severity="success" sx={{ mb: 2 }}>El backend confirmó el registro del reporte.</Alert>
+              <Typography id="incident-demo-title" component="h2" variant="h6" sx={{ fontWeight: 750 }}>Reporte guardado</Typography>
+              <Typography sx={{ mt: 1 }}><strong>Identificador:</strong> {reportReceipt.id}</Typography>
+              <Typography sx={{ mt: 1, overflowWrap: 'anywhere' }}><strong>Hash del registro:</strong> {reportReceipt.hash}</Typography>
+              {integrityStatus && <Alert severity={integrityStatus.integro ? 'success' : 'error'} sx={{ mt: 2 }}>
+                Verificación de la cadena completa: {integrityStatus.integro ? 'sin alteraciones detectadas' : `alteración detectada en ${integrityStatus.registro_alterado || 'un registro'}`} ({integrityStatus.bloques_auditados} registros revisados). Esto no es una verificación individual por identificador.
+              </Alert>}
+              {integrityError && <Alert severity="warning" sx={{ mt: 2 }}>El reporte sí se guardó, pero {integrityError}</Alert>}
+            </>
+          ) : (
+            <>
+              <Alert severity="warning" sx={{ mb: 2 }}>Demostración local: no se envió ni guardó ningún reporte.</Alert>
+              <Typography id="incident-demo-title" component="h2" variant="h6" sx={{ fontWeight: 750 }}>La información quedó solo en esta vista</Typography>
+              <Typography color="text.secondary" sx={{ mt: 1 }}>No se creó un número de radicado.</Typography>
+            </>
+          )}
           <Button sx={{ mt: 2 }} variant="outlined" startIcon={<EditNoteOutlinedIcon />} onClick={() => { setSpeechRevision((v) => v + 1); setStep('edit'); }}>Volver y editar</Button>
           <Button sx={{ mt: 2, ml: { sm: 1 } }} onClick={() => { setSpeechRevision((v) => v + 1); restart(); }}>Finalizar y limpiar</Button>
         </Paper>

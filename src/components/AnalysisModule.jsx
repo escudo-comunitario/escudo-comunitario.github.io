@@ -255,10 +255,10 @@ export default function AnalysisModule({ active = true, guided = false, resetVer
           onChange={(event) => { setMessage(event.target.value); setAnalysisConfirmed(false); if (status === 'validation') { setStatus('idle'); setError(''); } }}
           multiline minRows={4} maxRows={12} fullWidth
           disabled={isBusy || voiceState === 'listening'}
-          inputProps={{ 'aria-describedby': 'message-help' }}
+          inputProps={{ 'aria-describedby': 'message-help', maxLength: 2000 }}
         />}
         {showMessageField && <Typography id="message-help" variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-          {mode === 'voice' ? 'El micrófono se inicia al pulsar “Empezar a hablar”.' : 'No abras los enlaces. Aún no puedes analizar capturas.'}
+          {mode === 'voice' ? 'El micrófono se inicia al pulsar “Empezar a hablar”.' : 'No abras los enlaces. Aún no puedes analizar capturas.'} Máximo 2000 caracteres ({message.length}/2000).
         </Typography>}
 
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.25, mt: 2 }}>

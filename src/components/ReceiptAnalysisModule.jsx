@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Box, Button, CircularProgress, Paper, Typography } from '@mui/material';
 import ImageSearchOutlinedIcon from '@mui/icons-material/ImageSearchOutlined';
 import DeleteOutlineOutlinedIcon from '@mui/icons-material/DeleteOutlineOutlined';
-import { analyzeReceiptImage, MAX_RECEIPT_IMAGE_BYTES } from '../services/api';
+import { analyzeReceiptImage, AnalysisServiceError, MAX_RECEIPT_IMAGE_BYTES } from '../services/api';
 import { announceGuided, stopGuidedSpeech } from '../services/guidedSpeech';
 import GuidedVoiceControls from './GuidedVoiceControls';
 import ReceiptAnalysisResult, { getReceiptSpeechText } from './ReceiptAnalysisResult';
@@ -115,7 +115,14 @@ export default function ReceiptAnalysisModule({ active = true, guided = false, e
       setAutoSpeakKey((key) => key + 1);
     } catch (requestError) {
       if (requestRef.current !== controller || requestError?.name === 'AbortError') return;
-      console.error('No se pudo revisar el comprobante.', requestError);
+      const isServiceError = requestError instanceof AnalysisServiceError;
+      const kind = isServiceError ? requestError.kind : 'unexpected';
+      const diagnostic = { kind };
+      if (isServiceError && Number.isInteger(requestError.status)) diagnostic.status = requestError.status;
+      if (isServiceError && ['validation', 'invalid-response', 'invalid-json'].includes(kind)) {
+        diagnostic.reason = requestError.message;
+      }
+      console.error('No se pudo revisar el comprobante.', diagnostic);
       setError('No se pudo revisar el comprobante. Comprueba tu conexión e inténtalo de nuevo.');
       setStatus('error');
       announceGuided('No se pudo revisar el comprobante. Comprueba tu conexión e inténtalo de nuevo.');

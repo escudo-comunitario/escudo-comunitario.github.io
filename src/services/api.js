@@ -6,10 +6,11 @@ export const MAX_RECEIPT_IMAGE_BYTES = 5 * 1024 * 1024;
 const RECEIPT_IMAGE_TYPES = new Set(["image/jpeg", "image/png"]);
 
 export class AnalysisServiceError extends Error {
-  constructor(message, kind = "service") {
+  constructor(message, kind = "service", status = null) {
     super(message);
     this.name = "AnalysisServiceError";
     this.kind = kind;
+    this.status = Number.isInteger(status) ? status : null;
   }
 }
 
@@ -79,14 +80,14 @@ async function requestMultipart(path, { formData, signal, errorMessage, timeoutM
     }
 
     if (!response.ok) {
-      throw new AnalysisServiceError(`${errorMessage}. Inténtelo de nuevo más tarde.`, "service");
+      throw new AnalysisServiceError(`${errorMessage}. Inténtelo de nuevo más tarde.`, "http", response.status);
     }
     try {
       return await response.json();
     } catch (error) {
       if (timedOut) throw new AnalysisServiceError("El servicio está tardando. Puedes intentarlo de nuevo.", "timeout");
       if (signal?.aborted || error?.name === "AbortError") throw error;
-      throw new AnalysisServiceError("El servicio respondió con un formato que no se pudo leer. Inténtelo de nuevo.", "invalid-response");
+      throw new AnalysisServiceError("El servicio respondió con un formato que no se pudo leer. Inténtelo de nuevo.", "invalid-json");
     }
   } finally {
     globalThis.clearTimeout(timeoutId);
@@ -141,7 +142,7 @@ export function validateReceiptAnalysisResult(result) {
   if (!Array.isArray(result.senales_detectadas) || !result.senales_detectadas.every((item) => typeof item === "string")) {
     return { valid: false, reason: "Las señales detectadas no tienen el formato esperado." };
   }
-  if (result.senales_detectadas.length > 4) return { valid: false, reason: "La respuesta excede el máximo de señales permitido." };
+  if (result.senales_detectadas.length > 5) return { valid: false, reason: "La respuesta excede el máximo de señales permitido." };
   if (result.url_qr_extraida !== null && typeof result.url_qr_extraida !== "string") {
     return { valid: false, reason: "La URL del QR no tiene el formato esperado." };
   }

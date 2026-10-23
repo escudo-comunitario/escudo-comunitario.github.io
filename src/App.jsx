@@ -6,11 +6,13 @@ import {
 import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
+import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import ReportProblemOutlinedIcon from '@mui/icons-material/ReportProblemOutlined';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
 import BarChartOutlinedIcon from '@mui/icons-material/BarChartOutlined';
 import HomeModule from './components/HomeModule';
 import AnalysisModule from './components/AnalysisModule';
+import ReceiptAnalysisModule from './components/ReceiptAnalysisModule';
 import IncidentModule from './components/IncidentModule';
 import TrustModule from './components/TrustModule';
 import CommunityStatsModule from './components/CommunityStatsModule';
@@ -20,10 +22,11 @@ import { announceGuided, announceGuidedSequence, stopGuidedSpeech } from './serv
 
 const pages = [
   { id: 'home', label: 'Inicio', shortLabel: 'Inicio', icon: <HomeOutlinedIcon /> },
-  { id: 'analysis', label: 'Analizar mensaje', shortLabel: 'Analizar', icon: <SearchOutlinedIcon /> },
-  { id: 'incident', label: 'Registro de situación', shortLabel: 'Incidente', icon: <ReportProblemOutlinedIcon /> },
-  { id: 'trust', label: 'Red de confianza', shortLabel: 'Confianza', icon: <PeopleAltOutlinedIcon /> },
-  { id: 'stats', label: 'Estadísticas comunitarias', shortLabel: 'Datos', icon: <BarChartOutlinedIcon /> },
+  { id: 'analysis', label: 'Revisar un mensaje sospechoso', shortLabel: 'Revisar', icon: <SearchOutlinedIcon /> },
+  { id: 'receipt', label: 'Verificar comprobante de pago', shortLabel: 'Comprobante', icon: <ReceiptLongOutlinedIcon /> },
+  { id: 'incident', label: 'Contar algo que me pasó', shortLabel: 'Contar', icon: <ReportProblemOutlinedIcon /> },
+  { id: 'trust', label: 'Contactar a alguien de confianza', shortLabel: 'Contactar', icon: <PeopleAltOutlinedIcon /> },
+  { id: 'stats', label: 'Información comunitaria', shortLabel: 'Datos', icon: <BarChartOutlinedIcon /> },
 ];
 
 function PageNavigation({ page, onNavigate }) {
@@ -58,6 +61,7 @@ export default function App() {
   const [guided, setGuided] = useState(false);
   const [guidedHomeVisit, setGuidedHomeVisit] = useState(0);
   const [taskResetVersions, setTaskResetVersions] = useState({ analysis: 0, incident: 0, trust: 0 });
+  const [receiptEntryVersion, setReceiptEntryVersion] = useState(0);
   const guidedHomeLeadRef = useRef('');
   const guidedHomeGreetingRef = useRef(true);
 
@@ -114,8 +118,15 @@ export default function App() {
     setGuided(startGuided || experienceMode === 'guided');
     if (nextPage === 'analysis') {
       setAnalysisEntry((current) => ({ mode, version: current.version + 1 }));
+      setTaskResetVersions((current) => ({ ...current, analysis: current.analysis + 1 }));
     }
+    if (nextPage === 'receipt') setReceiptEntryVersion((version) => version + 1);
     setPage(nextPage);
+  };
+
+  const returnToNormalHome = () => {
+    resetAbandonedTask('incident');
+    navigate('home');
   };
 
   const enterMode = (mode) => {
@@ -132,7 +143,11 @@ export default function App() {
   const selectGuidedTask = (task) => {
     stopGuidedSpeech();
     setGuided(true);
-    if (task === 'analysis') setAnalysisEntry((current) => ({ mode: 'text', version: current.version + 1 }));
+    if (task === 'analysis') {
+      setAnalysisEntry((current) => ({ mode: 'text', version: current.version + 1 }));
+      setTaskResetVersions((current) => ({ ...current, analysis: current.analysis + 1 }));
+    }
+    if (task === 'receipt') setReceiptEntryVersion((version) => version + 1);
     setPage(task);
   };
 
@@ -150,7 +165,7 @@ export default function App() {
           <Box className="app-mode-actions" sx={{ ml: 'auto', display: 'flex', gap: 1 }}>
             {guided ? (
               <>
-                {page !== 'home' && <Button color="inherit" onClick={returnToGuidedHome} sx={{ minHeight: 48 }}>Inicio guiado</Button>}
+                {page !== 'home' && page !== 'receipt' && <Button color="inherit" onClick={returnToGuidedHome} sx={{ minHeight: 48 }}>Inicio guiado</Button>}
                 <Button color="inherit" onClick={() => switchToNormal()} sx={{ minHeight: 48 }}>Modo normal</Button>
               </>
             ) : (
@@ -167,10 +182,11 @@ export default function App() {
           {page === 'home' && (guided
             ? <GuidedHome onSelectTask={selectGuidedTask} onSwitchToNormal={() => switchToNormal()} onOpenStats={() => navigate('stats')} />
             : <HomeModule onNavigate={navigate} onOpenGuided={() => startGuidedHome()} />)}
-          <Box sx={{ display: page === 'analysis' ? 'block' : 'none' }}><AnalysisModule active={page === 'analysis'} guided={guided} resetVersion={taskResetVersions.analysis} onEnableGuided={() => setGuided(true)} onCancelGuided={() => switchToNormal('Modo normal. Puedes revisar el mensaje en el formulario habitual.', { returnHome: false, discardTask: false })} onGuidedHome={returnToGuidedHome} entryMode={analysisEntry.mode} entryVersion={analysisEntry.version} onRequestHelp={() => navigate('trust', 'text', guided)} /></Box>
-          <Box sx={{ display: page === 'incident' ? 'block' : 'none' }}><IncidentModule active={page === 'incident'} guided={guided} resetVersion={taskResetVersions.incident} onEnableGuided={() => setGuided(true)} onCancelGuided={() => switchToNormal('Modo normal. Puedes continuar en el formulario habitual.', { returnHome: false, discardTask: false })} onGuidedHome={returnToGuidedHome} /></Box>
+          <Box sx={{ display: page === 'analysis' ? 'block' : 'none' }}><AnalysisModule active={page === 'analysis'} guided={guided} resetVersion={taskResetVersions.analysis} onEnableGuided={() => setGuided(true)} onCancelGuided={() => switchToNormal('Modo normal. Puedes revisar el mensaje en el formulario habitual.', { returnHome: false, discardTask: false })} onGuidedHome={returnToGuidedHome} entryMode={analysisEntry.mode} entryVersion={analysisEntry.version} onRequestHelp={() => navigate('trust', 'text', guided)} onOpenReceipt={() => navigate('receipt', 'text', guided)} /></Box>
+          <Box sx={{ display: page === 'receipt' ? 'block' : 'none' }}><ReceiptAnalysisModule active={page === 'receipt'} guided={guided} entryVersion={receiptEntryVersion} onHome={() => guided ? returnToGuidedHome() : navigate('home')} onOpenAnalysis={() => navigate('analysis', 'text', guided)} /></Box>
+          <Box sx={{ display: page === 'incident' ? 'block' : 'none' }}><IncidentModule active={page === 'incident'} guided={guided} resetVersion={taskResetVersions.incident} onEnableGuided={() => setGuided(true)} onCancelGuided={() => switchToNormal('Modo normal. Puedes continuar en el formulario habitual.', { returnHome: false, discardTask: false })} onGuidedHome={returnToGuidedHome} onNormalHome={returnToNormalHome} /></Box>
           <Box sx={{ display: page === 'trust' ? 'block' : 'none' }}><TrustModule active={page === 'trust'} guided={guided} resetVersion={taskResetVersions.trust} onEnableGuided={() => setGuided(true)} onCancelGuided={() => switchToNormal('Modo normal. Puedes continuar en el formulario habitual.', { returnHome: false, discardTask: false })} onGuidedHome={returnToGuidedHome} /></Box>
-          <Box sx={{ display: page === 'stats' ? 'block' : 'none' }}><CommunityStatsModule active={page === 'stats'} guided={guided} onEnableGuided={() => setGuided(true)} onCancelGuided={() => switchToNormal()} onGuidedHome={returnToGuidedHome} onAnalyze={() => navigate('analysis')} /></Box>
+          <Box sx={{ display: page === 'stats' ? 'block' : 'none' }}><CommunityStatsModule active={page === 'stats'} guided={guided} onEnableGuided={() => setGuided(true)} onGuidedHome={returnToGuidedHome} onAnalyze={() => navigate('analysis')} onReport={() => navigate('incident')} /></Box>
         </Container>
       </Box>
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import { Alert, Box, Button, Typography } from '@mui/material';
 import HearingOutlinedIcon from '@mui/icons-material/HearingOutlined';
 import MicNoneOutlinedIcon from '@mui/icons-material/MicNoneOutlined';
@@ -6,12 +6,12 @@ import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
 import { announceGuided, announceGuidedSequence, getGuidedSpeechSnapshot, stopGuidedSpeech, subscribeGuidedSpeech } from '../services/guidedSpeech';
 
 function voiceErrorMessage(error) {
-  if (error === 'not-allowed' || error === 'service-not-allowed') return 'No se autorizó el micrófono. Puedes escribir la respuesta.';
+  if (error === 'not-allowed' || error === 'service-not-allowed') return 'No diste permiso para usar el micrófono. Puedes escribir la respuesta.';
   if (error === 'no-speech') return 'No alcancé a escuchar. Inténtalo de nuevo o escribe la respuesta.';
-  if (error === 'audio-capture') return 'No se encontró un micrófono disponible. Puedes escribir la respuesta.';
-  if (error === 'network') return 'Falló el reconocimiento de voz. Comprueba tu conexión o escribe la respuesta.';
+  if (error === 'audio-capture') return 'No pudimos usar el micrófono. Puedes escribir la respuesta.';
+  if (error === 'network') return 'No pudimos convertir tu voz en texto. Comprueba tu conexión o escribe la respuesta.';
   if (error === 'aborted') return '';
-  return 'No se pudo usar el micrófono. Puedes intentarlo de nuevo o escribir la respuesta.';
+  return 'No pudimos usar el micrófono. Puedes intentarlo de nuevo o escribir la respuesta.';
 }
 
 export default function GuidedVoiceControls({
@@ -19,7 +19,8 @@ export default function GuidedVoiceControls({
   onTranscript,
   onTranscriptFinal,
   speakSequence,
-  speakLabel = 'Escuchar de nuevo',
+  speakLabel = 'Escuchar resultado',
+  autoPlayKey,
   listenLabel = 'Responder hablando',
   showDictation = true,
   showSpeechControls = true,
@@ -30,7 +31,10 @@ export default function GuidedVoiceControls({
 }) {
   const [listening, setListening] = useState(false);
   const [completed, setCompleted] = useState(false);
+  const [hasPlayed, setHasPlayed] = useState(false);
   const [error, setError] = useState('');
+  const ownerId = useId();
+  const lastAutoPlayKeyRef = useRef(null);
   const recognitionRef = useRef(null);
   const hasResultRef = useRef(false);
   const failedRef = useRef(false);
@@ -41,16 +45,35 @@ export default function GuidedVoiceControls({
   const activeRef = useRef(active);
   activeRef.current = active;
   const speech = useSyncExternalStore(subscribeGuidedSpeech, getGuidedSpeechSnapshot, getGuidedSpeechSnapshot);
-  const speaking = speech.speaking;
+  const speaking = speech.speaking && speech.owner === ownerId;
   const SpeechRecognition = typeof window !== 'undefined' ? (window.SpeechRecognition || window.webkitSpeechRecognition) : null;
-  const canSpeak = speech.supported;
+  const canSpeak = speech.supported && speech.hasSpanishVoice;
+
+  useEffect(() => {
+    if (autoPlayKey === undefined || autoPlayKey === null || lastAutoPlayKeyRef.current === autoPlayKey) return;
+    lastAutoPlayKeyRef.current = autoPlayKey;
+    if (!active) return;
+    if (!canSpeak) {
+      setError(speech.supported
+        ? 'No hay una voz en español disponible. Puedes leer el resultado en pantalla.'
+        : 'La lectura por voz no está disponible en este navegador. Puedes leer el resultado en pantalla.');
+      return;
+    }
+    setHasPlayed(true);
+    const started = speakSequence
+      ? announceGuidedSequence(speakSequence, { owner: ownerId })
+      : announceGuided(speakText, { owner: ownerId });
+    if (!started) setError(getGuidedSpeechSnapshot().error || 'No se pudo reproducir la voz. Puedes leer el resultado en pantalla.');
+    else setError('');
+  }, [active, autoPlayKey, canSpeak, ownerId, speakSequence, speakText, speech.supported]);
 
   useEffect(() => {
     if (active) return;
     recognitionRef.current?.abort?.();
     recognitionRef.current = null;
     setListening(false);
-  }, [active]);
+    stopGuidedSpeech(ownerId);
+  }, [active, ownerId]);
 
   useEffect(() => () => {
     activeRef.current = false;
@@ -58,12 +81,20 @@ export default function GuidedVoiceControls({
   }, []);
 
   const repeat = () => {
-    if (speaking) return stopGuidedSpeech();
-    if (!canSpeak || (!speakText && !speakSequence)) return;
+    if (speaking) return stopGuidedSpeech(ownerId);
+    if (!canSpeak || (!speakText && !speakSequence)) {
+      setError(speech.supported
+        ? 'No hay una voz en español disponible. Puedes leer el texto en pantalla.'
+        : 'La lectura por voz no está disponible en este navegador. Puedes leer el texto en pantalla.');
+      return;
+    }
     setError('');
     setCompleted(false);
-    if (speakSequence) announceGuidedSequence(speakSequence);
-    else announceGuided(speakText);
+    setHasPlayed(true);
+    const started = speakSequence
+      ? announceGuidedSequence(speakSequence, { owner: ownerId })
+      : announceGuided(speakText, { owner: ownerId });
+    if (!started) setError(getGuidedSpeechSnapshot().error || 'No se pudo reproducir la voz. Puedes leer el texto en pantalla.');
   };
 
   const startListening = () => {
@@ -132,7 +163,7 @@ export default function GuidedVoiceControls({
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
         {showSpeechControls && canSpeak && (
           <Button type="button" variant={speaking ? 'contained' : 'outlined'} fullWidth={fullWidth} onClick={repeat} disabled={listening} startIcon={speaking ? <StopCircleOutlinedIcon /> : <HearingOutlinedIcon />} sx={{ minHeight: 48 }}>
-            {speaking ? 'Detener lectura' : speakLabel}
+            {speaking ? 'Detener lectura' : hasPlayed ? 'Escuchar de nuevo' : speakLabel}
           </Button>
         )}
         {showDictation && onTranscript && SpeechRecognition && (
@@ -143,9 +174,9 @@ export default function GuidedVoiceControls({
       </Box>
       {listening && <Typography role="status" aria-live="polite">Estoy escuchando. Pulsa “Terminar” cuando acabes.</Typography>}
       {completed && <Typography role="status" aria-live="polite">Dictado terminado. Revisa y edita el texto.</Typography>}
-      {showDictation && onTranscript && !SpeechRecognition && <Typography color="text.secondary">Este navegador no permite dictar aquí. Puedes escribir la respuesta.</Typography>}
-      {showSpeechControls && !canSpeak && <Typography color="text.secondary">La lectura por voz no está disponible; la instrucción sigue visible.</Typography>}
-      {(error || speech.error) && <Alert severity="warning" role="alert">{error || speech.error}</Alert>}
+      {showDictation && onTranscript && !SpeechRecognition && <Typography color="text.secondary">En este navegador no puedes dictar. Puedes escribir la respuesta.</Typography>}
+      {showSpeechControls && !canSpeak && <Typography color="text.secondary">{speech.supported ? 'No hay una voz en español disponible; puedes leer el texto en pantalla.' : 'La lectura por voz no está disponible; puedes leer el texto en pantalla.'}</Typography>}
+      {(error || (speech.owner === ownerId && speech.error)) && <Alert severity="warning" role="alert">{error || speech.error}</Alert>}
     </Box>
   );
 }

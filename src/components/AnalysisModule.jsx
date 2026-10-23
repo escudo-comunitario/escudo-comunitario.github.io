@@ -7,15 +7,22 @@ import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
 import SendOutlinedIcon from '@mui/icons-material/SendOutlined';
 import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
 import { analyzeMessage, validateAnalysisResult } from '../services/api';
-import AnalysisResult from './AnalysisResult';
+import AnalysisResult, { getMessageSpeechText } from './AnalysisResult';
 import GuidedVoiceControls from './GuidedVoiceControls';
 import { announceGuidedSequence, stopGuidedSpeech } from '../services/guidedSpeech';
 
-export default function AnalysisModule({ active = true, guided = false, resetVersion = 0, onEnableGuided, onCancelGuided, onGuidedHome, entryMode = 'text', entryVersion = 0, onRequestHelp }) {
+function cancelRecognition(recognition) {
+  if (typeof recognition?.abort === 'function') recognition.abort();
+  else recognition?.stop?.();
+}
+
+export default function AnalysisModule({ active = true, guided = false, resetVersion = 0, onEnableGuided, onCancelGuided, onGuidedHome, entryMode = 'text', entryVersion = 0, onRequestHelp, onOpenReceipt }) {
   const [message, setMessage] = useState('');
   const [mode, setMode] = useState(entryMode);
   const [status, setStatus] = useState('idle');
   const [result, setResult] = useState(null);
+  const [resultMessage, setResultMessage] = useState('');
+  const [autoSpeakKey, setAutoSpeakKey] = useState(0);
   const [analysisConfirmed, setAnalysisConfirmed] = useState(false);
   const [error, setError] = useState('');
   const [interaction, setInteraction] = useState({ message: '', version: 0 });
@@ -52,15 +59,16 @@ export default function AnalysisModule({ active = true, guided = false, resetVer
     if (lastResetVersionRef.current === resetVersion) return;
     lastResetVersionRef.current = resetVersion;
     narratedStateRef.current = '';
-    if (statusRef.current === 'result') return;
     requestRef.current?.abort();
     requestRef.current = null;
     globalThis.clearTimeout(timeoutRef.current);
     timeoutRef.current = null;
-    recognitionRef.current?.stop();
+    const recognition = recognitionRef.current;
     recognitionRef.current = null;
+    cancelRecognition(recognition);
     setMessage('');
     setResult(null);
+    setResultMessage('');
     setError('');
     setStatus('idle');
     setVoiceState('idle');
@@ -71,21 +79,31 @@ export default function AnalysisModule({ active = true, guided = false, resetVer
   useEffect(() => () => {
     requestRef.current?.abort();
     globalThis.clearTimeout(timeoutRef.current);
-    recognitionRef.current?.stop();
+    const recognition = recognitionRef.current;
+    recognitionRef.current = null;
+    cancelRecognition(recognition);
   }, []);
 
   useEffect(() => {
-    if (!active && voiceState === 'listening') recognitionRef.current?.stop();
+    if (!active && voiceState === 'listening') {
+      const recognition = recognitionRef.current;
+      recognitionRef.current = null;
+      cancelRecognition(recognition);
+      setVoiceState('idle');
+    }
   }, [active, voiceState]);
 
   useEffect(() => {
     if (!guided || !active) { guidedWasActiveRef.current = false; return; }
     if (mode !== entryMode) return;
+    // Result speech is triggered only by the successful submission that created it.
+    // Editing the input or changing modes must not replay a previous result.
+    if (status === 'result') return;
     const enteringGuidedTask = !guidedWasActiveRef.current;
     guidedWasActiveRef.current = true;
     if (enteringGuidedTask) narratedStateRef.current = '';
     if (voiceState === 'listening') return;
-    const stateKey = `${status}|${analysisConfirmed}|${analysisConfirmed ? message : ''}|${mode}|${error}|${interaction.version}|${result?.nivel_riesgo || ''}|${result?.color_semaforo || ''}|${result?.explicacion_ciudadana || ''}`;
+    const stateKey = `${entryVersion}|${status}|${analysisConfirmed}|${analysisConfirmed ? message : ''}|${mode}|${error}|${interaction.version}`;
     if (narratedStateRef.current === stateKey) return;
     narratedStateRef.current = stateKey;
     const modeChangeLead = modeChangeLeadRef.current;
@@ -97,16 +115,13 @@ export default function AnalysisModule({ active = true, guided = false, resetVer
     if (interaction.version > narratedInteractionRef.current) {
       narratedInteractionRef.current = interaction.version;
       announceGuidedSequence([...taskIntro, interaction.message]);
-    } else if (status === 'result' && result) {
-      const explanation = typeof result.explicacion_ciudadana === 'string' ? result.explicacion_ciudadana.trim() : '';
-      announceGuidedSequence([...taskIntro, `El servicio informa nivel de riesgo ${result.nivel_riesgo} y color de semáforo ${result.color_semaforo}.`, ...(explanation ? [explanation] : [])]);
     } else if (status === 'loading') announceGuidedSequence([...taskIntro, 'Análisis en curso. Puedes cancelarlo; el texto se conservará.']);
     else if (status === 'error' || status === 'invalid' || status === 'validation') announceGuidedSequence([...taskIntro, error || 'La respuesta recibida no tiene el formato esperado. Puedes conservar el texto e intentarlo de nuevo.']);
     else if (status === 'idle' && error) announceGuidedSequence([...taskIntro, error]);
     else if (analysisConfirmed) announceGuidedSequence([...taskIntro, 'Revisa este texto. Corrígelo si hace falta. Pulsa Analizar ahora para continuar.', message]);
     else if (mode === 'voice') announceGuidedSequence([...taskIntro, 'Pulsa Empezar a hablar. También puedes escribir o pegar el mensaje. Revísalo antes de analizarlo.']);
     else announceGuidedSequence([...taskIntro, 'Pega o escribe el mensaje. También puedes dictarlo. Revísalo antes de analizarlo.']);
-  }, [active, guided, status, analysisConfirmed, mode, entryMode, error, result, interaction, message, voiceState]);
+  }, [active, guided, status, analysisConfirmed, mode, entryMode, error, interaction, message, voiceState]);
 
   const submit = async (event) => {
     event.preventDefault();
@@ -125,6 +140,7 @@ export default function AnalysisModule({ active = true, guided = false, resetVer
     }
 
     const controller = new AbortController();
+    stopGuidedSpeech();
     requestRef.current = controller;
     setError('');
     setResult(null);
@@ -132,20 +148,29 @@ export default function AnalysisModule({ active = true, guided = false, resetVer
     const requestTimeout = window.setTimeout(() => {
       controller.abort();
       if (requestRef.current === controller) requestRef.current = null;
-      setError('El servicio está tardando. Puedes intentarlo de nuevo.');
+      setError('La revisión está tardando más de lo esperado. Puedes esperar o cancelar.');
       setStatus('error');
     }, 30000);
     timeoutRef.current = requestTimeout;
 
     try {
-      const response = await analyzeMessage(message, undefined, { signal: controller.signal });
+      const response = await analyzeMessage(message, undefined, {
+        signal: controller.signal,
+        modo: mode === 'voice' ? 'voz' : 'texto',
+      });
+      if (requestRef.current !== controller) return;
       const validation = validateAnalysisResult(response);
       if (!validation.valid) throw Object.assign(new Error(validation.reason), { kind: 'invalid-response' });
       setResult(response);
+      setResultMessage(message.trim());
       setStatus('result');
+      setAutoSpeakKey((key) => key + 1);
     } catch (requestError) {
-      if (requestError?.name === 'AbortError') return;
-      setError(requestError?.message || 'No fue posible completar la revisión. Comprueba tu conexión e inténtalo de nuevo.');
+      if (requestRef.current !== controller || requestError?.name === 'AbortError') return;
+      console.error('No se pudo revisar el mensaje.', requestError);
+      setError(requestError?.kind === 'invalid-response'
+        ? 'No pudimos obtener el resultado. Inténtalo de nuevo.'
+        : 'No pudimos revisar el mensaje. Comprueba tu conexión e inténtalo de nuevo.');
       setStatus(requestError?.kind === 'invalid-response' ? 'invalid' : 'error');
     } finally {
       window.clearTimeout(requestTimeout);
@@ -184,12 +209,14 @@ export default function AnalysisModule({ active = true, guided = false, resetVer
     setVoiceState('listening');
     setError('');
     recognition.onresult = (event) => {
+      if (recognitionRef.current !== recognition) return;
       voiceHasResultRef.current = true;
       const transcript = Array.from(event.results).map((item) => item[0]?.transcript || '').join('');
       setMessage(`${textBeforeDictation}${textBeforeDictation && transcript ? ' ' : ''}${transcript}`);
       setAnalysisConfirmed(false);
     };
     recognition.onerror = (event) => {
+      if (recognitionRef.current !== recognition) return;
       voiceFailedRef.current = true;
       setVoiceState('idle');
       voiceErrorRef.current = event.error === 'not-allowed' || event.error === 'service-not-allowed'
@@ -200,6 +227,7 @@ export default function AnalysisModule({ active = true, guided = false, resetVer
       setError(voiceErrorRef.current);
     };
     recognition.onend = () => {
+      if (recognitionRef.current !== recognition) return;
       setVoiceState('idle');
       recognitionRef.current = null;
       if (!voiceHasResultRef.current && !voiceFailedRef.current) {
@@ -220,18 +248,20 @@ export default function AnalysisModule({ active = true, guided = false, resetVer
   };
 
   const clearForm = () => {
-    recognitionRef.current?.stop();
-    setMessage(''); setResult(null); setError(''); setStatus('idle'); setVoiceState('idle'); setAnalysisConfirmed(false);
+    stopGuidedSpeech();
+    const recognition = recognitionRef.current;
+    recognitionRef.current = null;
+    cancelRecognition(recognition);
+    setMessage(''); setResult(null); setResultMessage(''); setError(''); setStatus('idle'); setVoiceState('idle'); setAnalysisConfirmed(false);
   };
 
-  const resultNarration = result && [
-    `El servicio informa nivel ${result.nivel_riesgo} y semáforo ${result.color_semaforo}.`,
-    result.explicacion_ciudadana,
-    ...(Array.isArray(result.recomendaciones) ? result.recomendaciones : []),
-  ].filter((part) => typeof part === 'string' && part.trim()).join(' ');
+  const resultNarration = result ? getMessageSpeechText(result) : '';
 
   return (
     <Box sx={{ display: 'grid', gap: 2 }}>
+      <Button type="button" variant="outlined" onClick={onOpenReceipt} sx={{ justifySelf: 'start', minHeight: 48 }}>
+        Verificar comprobante de pago
+      </Button>
       <Box>
         <Typography component="h1" variant="h4" sx={{ fontWeight: 800, mb: 0.75 }}>
           {mode === 'voice' ? 'Cuéntalo con tu voz' : 'Revisar mensaje'}
@@ -243,7 +273,7 @@ export default function AnalysisModule({ active = true, guided = false, resetVer
       </Box>
 
       <Alert severity="info">No escribas tus contraseñas ni los códigos que te llegan al celular.</Alert>
-      {guided && <GuidedVoiceControls active={active} speakText={mode === 'voice' ? 'Pulsa Empezar a hablar. Revisa el texto antes de analizarlo.' : 'Pega o escribe el mensaje. También puedes dictarlo. Revísalo antes de analizarlo.'} showDictation={false} />}
+      <GuidedVoiceControls active={active} speakText={mode === 'voice' ? 'Puedes contar el mensaje con tu voz. Revísalo antes de analizarlo.' : 'Pega o escribe el mensaje. Puedes escucharlo antes de analizarlo.'} autoPlayKey={guided || mode !== entryMode ? undefined : entryVersion} speakLabel="Escuchar instrucciones" showDictation={false} />
 
       <Paper component="form" onSubmit={submit} variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderRadius: 3 }} aria-busy={isBusy}>
         {showMessageField && <TextField
@@ -252,7 +282,7 @@ export default function AnalysisModule({ active = true, guided = false, resetVer
           label={mode === 'voice' ? 'Texto reconocido (puedes corregirlo)' : 'Mensaje que quieres revisar'}
           placeholder={mode === 'voice' ? 'El texto aparecerá aquí…' : 'Pega aquí el mensaje…'}
           value={message}
-          onChange={(event) => { setMessage(event.target.value); setAnalysisConfirmed(false); if (status === 'validation') { setStatus('idle'); setError(''); } }}
+          onChange={(event) => { if (result && status === 'result') stopGuidedSpeech(); setMessage(event.target.value); setAnalysisConfirmed(false); if (status === 'validation') { setStatus('idle'); setError(''); } }}
           multiline minRows={4} maxRows={12} fullWidth
           disabled={isBusy || voiceState === 'listening'}
           inputProps={{ 'aria-describedby': 'message-help', maxLength: 2000 }}
@@ -296,10 +326,13 @@ export default function AnalysisModule({ active = true, guided = false, resetVer
       </Paper>
 
       {error && <Alert severity={status === 'validation' ? 'warning' : 'error'} role="alert">{error}</Alert>}
-      {isBusy && <Alert severity="info" role="status" aria-live="polite">Esperando respuesta del servicio. Puedes cancelar; el texto se conservará.</Alert>}
+      {isBusy && <Alert severity="info" role="status" aria-live="polite">Estamos revisando el mensaje. Puedes cancelar; el texto se conservará.</Alert>}
       {result && <>
+        {resultMessage !== message.trim() && <Alert severity="info" role="status" sx={{ mt: 1 }}>
+          Este resultado corresponde al texto anterior. Pulsa «Analizar mensaje» para revisar el texto actualizado.
+        </Alert>}
         <AnalysisResult result={result} />
-        {guided && <GuidedVoiceControls active={active} speakText={resultNarration} speakLabel="Escuchar explicación y recomendaciones" showDictation={false} />}
+        <GuidedVoiceControls active={active} speakText={resultNarration} speakLabel="Escuchar resultado" autoPlayKey={autoSpeakKey} showDictation={false} />
         <Button variant="outlined" onClick={onRequestHelp}>¿Quieres revisarlo con alguien de confianza?</Button>
       </>}
     </Box>

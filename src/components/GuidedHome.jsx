@@ -3,14 +3,12 @@ import { Box, Button, Paper, Typography } from '@mui/material';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import ReportProblemOutlinedIcon from '@mui/icons-material/ReportProblemOutlined';
 import PeopleAltOutlinedIcon from '@mui/icons-material/PeopleAltOutlined';
+import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import BarChartOutlinedIcon from '@mui/icons-material/BarChartOutlined';
 import GuidedVoiceControls from './GuidedVoiceControls';
 
 export const guidedOptionsSequence = [
-  'Uno. Revisar un mensaje sospechoso.',
-  'Dos. Contar algo que me pasó.',
-  'Tres. Contactar a alguien de confianza.',
-  'Cuatro. Ver información comunitaria.',
+  'Puedes revisar un mensaje sospechoso, verificar un comprobante, contar algo que te pasó o contactar a alguien de confianza. Elige una opción.',
 ];
 
 export const guidedHomeSequence = [
@@ -20,6 +18,7 @@ export const guidedHomeSequence = [
 
 const tasks = [
   { id: 'analysis', title: 'Revisar un mensaje sospechoso', detail: 'Mira un mensaje antes de responder.', icon: <SearchOutlinedIcon /> },
+  { id: 'receipt', title: 'Verificar comprobante de pago', detail: 'Revisa señales de alerta en la imagen de un comprobante.', icon: <ReceiptLongOutlinedIcon /> },
   { id: 'incident', title: 'Contar algo que me pasó', detail: 'Cuéntalo paso a paso.', icon: <ReportProblemOutlinedIcon /> },
   { id: 'trust', title: 'Contactar a alguien de confianza', detail: 'Prepara un mensaje para pedir ayuda.', icon: <PeopleAltOutlinedIcon /> },
 ];

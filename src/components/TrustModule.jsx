@@ -154,7 +154,7 @@ export default function TrustModule({ active = true, guided = false, resetVersio
         <DialogContent id="trust-open-confirm-description">Se abrirá una conversación con el número que revisaste y el texto preparado. Tú decides si lo envías; el mensaje aún no se ha enviado.</DialogContent>
         <DialogActions>
           <Button onClick={closeConfirmation}>Cancelar</Button>
-          <Button component="a" href={preview?.url} target="_blank" rel="noopener noreferrer" onClick={() => { setConfirmOpen(false); announceGuidedSequence(['Se abrirá WhatsApp con el mensaje preparado. El mensaje no se ha enviado; tú decides si lo envías.']); }}>Abrir WhatsApp</Button>
+          <Button component="a" href={preview?.url} target="_blank" rel="noopener noreferrer" onClick={() => { setConfirmOpen(false); onGuidedHome?.(); }}>Abrir WhatsApp</Button>
         </DialogActions>
       </Dialog>
     </Box>

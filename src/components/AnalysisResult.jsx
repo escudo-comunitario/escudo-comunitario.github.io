@@ -1,50 +1,41 @@
 import React from 'react';
-import { Alert, Box, Paper, Typography } from '@mui/material';
+import { Alert, Typography } from '@mui/material';
+import CitizenResultSummary from './CitizenResultSummary';
+
+const COPY_BY_RISK = {
+  ALTO: { title: 'Cuidado: este mensaje tiene señales de posible engaño', action: 'No abras enlaces ni compartas claves o códigos.' },
+  MEDIO: { title: 'Ten cuidado: no pudimos confirmar este mensaje', action: 'Consulta directamente con la entidad por un canal oficial.' },
+  BAJO: { title: 'No encontramos señales claras de engaño', action: 'Si tienes dudas, confirma por un canal oficial.' },
+};
+
+export function getMessageSpeechText(result) {
+  const risk = typeof result?.nivel_riesgo === 'string' ? result.nivel_riesgo.trim().toUpperCase() : '';
+  const copy = COPY_BY_RISK[risk] || { title: 'No pudimos interpretar el resultado', action: '' };
+  const recommendations = Array.isArray(result?.recomendaciones) ? result.recomendaciones : [];
+  return [copy.title, result?.explicacion_ciudadana, ...recommendations, ...(recommendations.length ? [] : [copy.action])]
+    .filter((part) => typeof part === 'string' && part.trim())
+    .join('. ');
+}
 
 export default function AnalysisResult({ result }) {
-  const risk = result.nivel_riesgo.trim().toUpperCase();
-  const light = result.color_semaforo.trim().toUpperCase();
-  const documentedHighRisk = risk === 'ALTO' && light === 'ROJO';
-  const statusStyle = documentedHighRisk
-    ? { bg: 'error.light', fg: 'error.main', label: 'El servicio informa ALTO · ROJO' }
-    : { bg: 'grey.100', fg: 'text.primary', label: `Nivel y semáforo informados: ${result.nivel_riesgo} · ${result.color_semaforo}` };
+  const risk = typeof result.nivel_riesgo === 'string' ? result.nivel_riesgo.trim().toUpperCase() : '';
+  const light = typeof result.color_semaforo === 'string' ? result.color_semaforo.trim().toUpperCase() : '';
+  const expectedLight = { ALTO: 'ROJO', MEDIO: 'AMARILLO', BAJO: 'VERDE' };
+  const coherent = expectedLight[risk] === light;
+  const copy = COPY_BY_RISK[risk] || { title: 'No pudimos interpretar el resultado', action: 'Inténtalo de nuevo o busca orientación por un canal oficial.' };
   const recommendations = Array.isArray(result.recomendaciones) ? result.recomendaciones : [];
-
-  return (
-    <Paper component="section" aria-labelledby="analysis-result-title" variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderRadius: 3 }}>
-      <Box sx={{ p: 2, mb: 2, borderRadius: 2, bgcolor: statusStyle.bg, color: statusStyle.fg }}>
-        <Typography id="analysis-result-title" component="h2" variant="h5" sx={{ fontWeight: 750 }}>
-          Resultado recibido del servicio
-        </Typography>
-        <Typography sx={{ mt: 0.5, fontWeight: 700 }}>{statusStyle.label}</Typography>
-        <Typography>Nivel de riesgo informado: {result.nivel_riesgo}</Typography>
-      </Box>
-      {!documentedHighRisk && (
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          La combinación de riesgo y semáforo no está confirmada en el contrato disponible. Revise con cautela; la aplicación no la clasificará como segura.
-        </Alert>
-      )}
-      <Alert severity="info" sx={{ mb: 2 }}>
-        La confianza no se muestra: el campo y su formato aún deben confirmarse con el equipo.
-      </Alert>
-      <Typography component="h3" variant="subtitle1" sx={{ fontWeight: 700 }}>Explicación</Typography>
-      <Typography sx={{ mb: 2 }}>{result.explicacion_ciudadana}</Typography>
-      {typeof result.modalidad_detectada === 'string' && result.modalidad_detectada.trim() && (
-        <Typography sx={{ mb: 2 }}><strong>Modalidad informada:</strong> {result.modalidad_detectada}</Typography>
-      )}
-      {recommendations.length > 0 ? (
-        <>
-          <Typography component="h3" variant="subtitle1" sx={{ fontWeight: 700 }}>Recomendaciones</Typography>
-          <Box component="ul" sx={{ pl: 3, mt: 0.5 }}>
-            {recommendations.map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}
-          </Box>
-        </>
-      ) : (
-        <Typography color="text.secondary">El servicio no entregó recomendaciones para esta respuesta.</Typography>
-      )}
-      <Typography component="p" variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2, lineHeight: 1.6 }}>
-        El análisis emitido por la Inteligencia Artificial es preventivo y orientativo; no reemplaza una denuncia penal formal ni un dictamen pericial oficial emitido por las autoridades judiciales competentes.
-      </Typography>
-    </Paper>
-  );
+  return <CitizenResultSummary
+    title={copy.title}
+    explanation={result.explicacion_ciudadana}
+    action={recommendations.length ? '' : copy.action}
+    risk={coherent ? risk : ''}
+    neutral={!coherent}
+    cautionMessage="Que no aparezcan señales claras no demuestra que el mensaje sea auténtico. Si tienes dudas, consulta por un canal oficial."
+    recommendations={recommendations}
+  >
+    {!coherent && <Alert severity="info" sx={{ mt: 2 }}>No pudimos interpretar este resultado con claridad. Inténtalo de nuevo.</Alert>}
+    {typeof result.modalidad_detectada === 'string' && result.modalidad_detectada.trim() && (
+      <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>El mensaje parece corresponder a: {result.modalidad_detectada}</Typography>
+    )}
+  </CitizenResultSummary>;
 }

@@ -12,12 +12,12 @@ function getInstallInstructions() {
   const platform = typeof navigator === 'undefined' ? '' : navigator.platform;
   const touchPoints = typeof navigator === 'undefined' ? 0 : navigator.maxTouchPoints;
   if (/iPad|iPhone|iPod/i.test(userAgent) || (platform === 'MacIntel' && touchPoints > 1)) {
-    return 'En Safari, pulsa Compartir y luego “Añadir a pantalla de inicio”. Si esa opción no aparece, comprueba que abriste Escudo desde una dirección HTTPS.';
+    return 'En Safari, pulsa Compartir y luego “Añadir a pantalla de inicio”. Si esa opción no aparece, abre Escudo desde su sitio web seguro.';
   }
   if (/Android/i.test(userAgent)) {
-    return 'Abre el menú del navegador y elige “Instalar aplicación” o “Añadir a pantalla de inicio”. Si la opción no aparece, vuelve a intentarlo desde una dirección HTTPS.';
+    return 'Abre el menú del navegador y elige “Instalar aplicación” o “Añadir a pantalla de inicio”. Si la opción no aparece, vuelve a intentarlo desde el sitio web seguro de Escudo.';
   }
-  return 'Abre el menú del navegador y busca “Instalar aplicación” o “Instalar Escudo Comunitario”. Si la opción no aparece, el navegador o el sitio quizá aún no cumpla sus requisitos de instalación.';
+  return 'Abre el menú del navegador y busca “Instalar aplicación” o “Instalar Escudo Comunitario”. Si no aparece, quizá aún no sea posible instalarla desde este navegador.';
 }
 
 export default function InstallAppButton({ color = 'primary', variant = 'outlined', compact = false }) {
